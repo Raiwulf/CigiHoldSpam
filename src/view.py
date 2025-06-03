@@ -43,7 +43,7 @@ class App(ctk.CTk):
 
             return os.path.join(base_path, relative_path)
 
-        icon_actual_path = resource_path(os.path.join("res", "resolute_cmp.ico"))
+        icon_actual_path = resource_path(os.path.join("res", "app.png"))
         self.iconpath = ImageTk.PhotoImage(file=icon_actual_path)
         self.wm_iconbitmap()
         self.iconphoto(False, self.iconpath)
