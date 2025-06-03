@@ -1,4 +1,7 @@
 import customtkinter as ctk
+from PIL import ImageTk
+import os
+import sys
 from core.config_manager import ConfigManager
 from core.spam_controller import SpamController
 
@@ -7,10 +10,9 @@ class App(ctk.CTk):
         super().__init__()
 
         self.title("CigiHoldSpam")
-        self.geometry("400x300")
+        self.geometry("300x300")
 
         self.config_manager = ConfigManager()
-        self.spamming_label_default_color = None
 
         self.spam_controller = SpamController(
             config_manager=self.config_manager,
@@ -30,6 +32,22 @@ class App(ctk.CTk):
         
         self.protocol("WM_DELETE_WINDOW", self._on_closing)
 
+        # Helper function to get resource path
+        def resource_path(relative_path):
+            """ Get absolute path to resource, works for dev and for PyInstaller """
+            try:
+                # PyInstaller creates a temp folder and stores path in _MEIPASS
+                base_path = sys._MEIPASS
+            except Exception:
+                base_path = os.path.abspath(".")
+
+            return os.path.join(base_path, relative_path)
+
+        icon_actual_path = resource_path(os.path.join("res", "resolute_cmp.ico"))
+        self.iconpath = ImageTk.PhotoImage(file=icon_actual_path)
+        self.wm_iconbitmap()
+        self.iconphoto(False, self.iconpath)
+
     def _create_features_tab_widgets(self):
         features_tab = self.tab_view.tab("Features")
         features_tab.grid_columnconfigure(0, weight=1)
@@ -45,21 +63,16 @@ class App(ctk.CTk):
         )
         self.active_toggle.pack(pady=(20, 5))
 
-        self.spamming_label = ctk.CTkLabel(features_tab, text="Spamming")
-        self.after(10, self._store_default_spamming_label_color)
+        self.spamming_label = ctk.CTkLabel(features_tab, text="Waiting", text_color="red")
         self._update_spamming_label_visibility()
-
-    def _store_default_spamming_label_color(self):
-        if self.spamming_label.winfo_exists():
-             self.spamming_label_default_color = self.spamming_label.cget("text_color")
 
     def _handle_trigger_met(self):
         if self.spamming_label.winfo_exists():
-            self.spamming_label.configure(text_color="green")
+            self.spamming_label.configure(text="Executing", text_color="green")
 
     def _handle_trigger_not_met(self):
-        if self.spamming_label.winfo_exists() and self.spamming_label_default_color:
-            self.spamming_label.configure(text_color=self.spamming_label_default_color)
+        if self.spamming_label.winfo_exists():
+            self.spamming_label.configure(text="Waiting", text_color="red")
 
     def _on_active_toggle(self):
         self._update_spamming_label_visibility()
@@ -69,9 +82,6 @@ class App(ctk.CTk):
                 self.active_toggle_var.set("off")
                 self._update_spamming_label_visibility()
                 return
-            
-            if self.spamming_label.winfo_exists():
-                 self.spamming_label_default_color = self.spamming_label.cget("text_color")
             
             self.spam_controller.start()
         else:
@@ -108,7 +118,7 @@ class App(ctk.CTk):
             ("ProcessName:", "ProcessName", 0),
             ("TriggerKey:", "TriggerKey", 1),
             ("SpamKey:", "SpamKey", 2),
-            ("DelayMS:", "DelayMS", 3)
+            ("Delay(ms):", "DelayMS", 3)
         ]
         self.entries = {}
         for label_text, config_key, row_idx in fields:
@@ -136,7 +146,11 @@ class App(ctk.CTk):
     def _load_settings_from_config(self):
         for config_key, entry_widget in self.entries.items():
             entry_widget.delete(0, ctk.END)
-            entry_widget.insert(0, self.config_manager.get_setting("Settings", config_key))
+            value = self.config_manager.get_setting("Settings", config_key)
+            if config_key == "SpamKey" and isinstance(value, list):
+                entry_widget.insert(0, ",".join(value))
+            else:
+                entry_widget.insert(0, value)
         print("Settings loaded!")
 
     def _save_settings(self):

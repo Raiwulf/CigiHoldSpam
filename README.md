@@ -5,6 +5,10 @@ CigiHoldSpam is a Python application designed to automate keystrokes in a target
 ## Features
 
 -   **Targeted Keystroke Automation**: Sends a specified keystroke (`SpamKey`) to a target application (`ProcessName`).
+-   **Multiple Key Spamming**: Allows configuring a sequence of multiple keys to be spammed. For example, `key1,key2,key3`.
+    -   Keys are separated by a comma (`,`).
+    -   The initial `DelayMS` is applied before the first key in the sequence.
+    -   A randomized delay (`DelayMS` from config +/- 4ms) is applied *between* each subsequent key in the sequence.
 -   **Trigger Activation**: Activates when the target application is in focus AND a specified `TriggerKey` is held down.
 -   **Configurable Delay**: Allows setting a base delay (`DelayMS`) for the keystroke, with a small random jitter (+/- 4ms) applied automatically.
 -   **GUI for Configuration**: 
@@ -46,10 +50,13 @@ CigiHoldSpam is a Python application designed to automate keystrokes in a target
         -   Can be a single alphanumeric character (e.g., `2`, `a`, `Z`).
         -   Can be a named key (e.g., `F1`, `ENTER`, `SHIFT`, `CTRL`, `ALT`, `SPACE`, `LEFT`, `UP`). Case-insensitive.
         -   *See Known Issues below.*
-    -   **SpamKey**: Enter the key that will be sent as a keystroke to the target application.
-        -   Same input options as `TriggerKey`.
+    -   **SpamKey**: Enter the key or sequence of keys that will be sent as keystrokes to the target application.
+        -   For a single key, use the same input options as `TriggerKey` (e.g., `a`, `F1`, `SPACE`).
+        -   For multiple keys, enter them separated by a comma (`,`) (e.g., `3,4,5` or `a,b,SPACE`).
         -   *See Known Issues below.*
-    -   **DelayMS**: Enter the base delay in milliseconds before the `SpamKey` is sent after conditions are met.
+    -   **DelayMS**: Enter the base delay in milliseconds.
+        -   For single key spam: Applied before the `SpamKey` is sent (with +/- 4ms jitter).
+        -   For multiple key spam: Applied before the *first key* in the sequence. The same base delay (with +/- 4ms jitter) is also used for the delay *between* subsequent keys in the sequence.
     -   Click **Save** to save your settings to `config.ini`. 
     -   Click **Load** to load settings from `config.ini` into the fields.
 

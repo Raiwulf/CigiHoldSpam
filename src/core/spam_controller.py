@@ -1,5 +1,6 @@
 import platform
 import random
+import time
 from .key_mapper import KeyMapper
 from .process_monitor import ProcessMonitor
 from .input_simulator import InputSimulator
@@ -31,13 +32,27 @@ class SpamController:
         if not self.dependencies_available:
             print("SpamController: One or more core components are not operable. Controller will not function.")
 
-    def _send_spam_key_action(self, spam_vk_code, spam_key_char):
-        if not self.is_active:
+    def _send_individual_key_action(self, spam_vk_code):
+        if not self.is_active or not self.dependencies_available:
             return
-        if not self.dependencies_available:
-            return 
-        
         self.input_simulator.send_key_press_release(spam_vk_code)
+
+    def _execute_spam_sequence(self, spam_key_chars, base_delay_ms):
+        if not self.is_active or not self.dependencies_available:
+            return
+
+        for i, key_char in enumerate(spam_key_chars):
+            spam_vk_code = self.key_mapper.get_vk_code(key_char)
+            if spam_vk_code is None:
+                print(f"SpamController: Unknown spam key '{key_char}'")
+                continue
+
+            if i > 0:
+                inter_key_delay_jitter_ms = random.uniform(-4, 4)
+                inter_key_actual_delay_ms = max(0, base_delay_ms + inter_key_delay_jitter_ms)
+                time.sleep(inter_key_actual_delay_ms / 1000.0)
+            
+            self._send_individual_key_action(spam_vk_code)
 
     def _check_conditions_loop(self):
         if not self.is_active:
@@ -65,22 +80,18 @@ class SpamController:
         if is_focused and is_key_pressed:
             self.on_trigger_met_callback()
             
-            spam_key_char = self.config_manager.get_setting("Settings", "SpamKey")
-            spam_vk_code = self.key_mapper.get_vk_code(spam_key_char)
+            spam_key_chars_list = self.config_manager.get_setting("Settings", "SpamKey")
             
-            if spam_vk_code is not None:
+            if spam_key_chars_list:
                 try:
                     base_delay_ms_str = self.config_manager.get_setting("Settings", "DelayMS")
                     base_delay_ms = int(base_delay_ms_str)
                 except ValueError:
                     base_delay_ms = DEFAULT_DELAY_MS
                 
-                jitter_ms = random.randint(-4, 4)
-                actual_delay_ms = max(0, base_delay_ms + jitter_ms)
-                
-                self.root_tk_window.after(actual_delay_ms, 
-                                          lambda svk=spam_vk_code, skc=spam_key_char: \
-                                          self._send_spam_key_action(svk, skc))
+                self.root_tk_window.after(base_delay_ms, 
+                                          lambda skcl=list(spam_key_chars_list), bdms=base_delay_ms: \
+                                          self._execute_spam_sequence(skcl, bdms))
         else:
             self.on_trigger_not_met_callback()
 

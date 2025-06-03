@@ -42,8 +42,14 @@ class ConfigManager:
 
     def get_setting(self, section, key):
         if not self.config.has_section(section) or not self.config.has_option(section, key):
-            return DEFAULT_SETTINGS.get(section, {}).get(key)
-        return self.config.get(section, key)
+            default_value = DEFAULT_SETTINGS.get(section, {}).get(key)
+            if key == "SpamKey" and default_value:
+                return [k.strip() for k in default_value.split(',')]
+            return default_value
+        value = self.config.get(section, key)
+        if key == "SpamKey":
+            return [k.strip() for k in value.split(',')]
+        return value
 
     def set_setting(self, section, key, value):
         if not self.config.has_section(section):

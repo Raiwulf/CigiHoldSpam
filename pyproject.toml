@@ -5,7 +5,7 @@ description = "Default template for PDM package"
 authors = [
     {name = "Raiwulf", email = ""},
 ]
-dependencies = ["customtkinter>=5.2.2", "pywin32>=310", "psutil>=7.0.0"]
+dependencies = ["customtkinter>=5.2.2", "pywin32>=310", "psutil>=7.0.0", "pillow>=11.2.1"]
 requires-python = "==3.13.*"
 readme = "README.md"
 license = {text = "MIT"}
@@ -16,3 +16,8 @@ distribution = false
 
 [tool.pdm.scripts]
 start = "python src/main.py"
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.13.0",
+]
