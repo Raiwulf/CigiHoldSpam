@@ -21,6 +21,7 @@ class SpamController:
 
         self.is_active = False
         self.listener_job_id = None
+        self.active_settings = {} # Store the "locked-in" settings
         
         self.dependencies_available = (
             self.key_mapper.is_operable() and 
@@ -66,8 +67,9 @@ class SpamController:
             self.stop()
             return
 
-        target_process_name = self.config_manager.get_setting("Settings", "ProcessName")
-        trigger_key_char = self.config_manager.get_setting("Settings", "TriggerKey")
+        # Use the locked-in settings, not the global config manager
+        target_process_name = self.active_settings.get("ProcessName")
+        trigger_key_char = self.active_settings.get("TriggerKey")
         
         trigger_vk_code = self.key_mapper.get_vk_code(trigger_key_char)
         
@@ -80,13 +82,15 @@ class SpamController:
         if is_focused and is_key_pressed:
             self.on_trigger_met_callback()
             
-            spam_key_chars_list = self.config_manager.get_setting("Settings", "SpamKey")
+            # Use the locked-in settings
+            spam_key_chars_list = self.active_settings.get("SpamKey", [])
             
             if spam_key_chars_list:
                 try:
-                    base_delay_ms_str = self.config_manager.get_setting("Settings", "DelayMS")
+                    # Use the locked-in settings
+                    base_delay_ms_str = self.active_settings.get("DelayMS")
                     base_delay_ms = int(base_delay_ms_str)
-                except ValueError:
+                except (ValueError, TypeError):
                     base_delay_ms = DEFAULT_DELAY_MS
                 
                 self.root_tk_window.after(base_delay_ms, 
@@ -98,13 +102,16 @@ class SpamController:
         if self.is_active:
             self.listener_job_id = self.root_tk_window.after(CHECK_INTERVAL_MS, self._check_conditions_loop)
 
-    def start(self):
+    def start(self, settings_snapshot):
         if not self.dependencies_available:
             print("SpamController: Cannot start, dependencies not available or not on Windows.")
             return False
             
         if self.is_active:
             return True
+
+        self.active_settings = settings_snapshot # Lock in the settings for this session
+        print(f"SpamController started with settings: {self.active_settings}")
 
         self.is_active = True
         if self.listener_job_id:
@@ -120,6 +127,8 @@ class SpamController:
         if self.listener_job_id:
             self.root_tk_window.after_cancel(self.listener_job_id)
             self.listener_job_id = None
+        
+        self.active_settings = {} # Clear locked-in settings on stop
         self.on_trigger_not_met_callback()
         
     def is_operable(self):
