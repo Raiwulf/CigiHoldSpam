@@ -23,7 +23,6 @@ class SpamController:
         self.listener_job_id = None
         self.active_settings = {} # Store the "locked-in" settings
         self.is_spamming = False  # Toggle state for spamming
-        self.was_trigger_pressed = False  # Track previous trigger key state
         self.key_held_down = False  # Track if key is currently held down to prevent rapid toggling
         self.spam_loop_job_id = None  # Job ID for the continuous spam loop
         
@@ -168,9 +167,6 @@ class SpamController:
         elif not self.is_spamming:
             self.on_trigger_not_met_callback()
 
-        # Update previous state for next iteration
-        self.was_trigger_pressed = is_key_pressed
-
         if self.is_active:
             self.listener_job_id = self.root_tk_window.after(CHECK_INTERVAL_MS, self._check_conditions_loop)
 
@@ -187,7 +183,6 @@ class SpamController:
 
         # Reset toggle state
         self.is_spamming = False
-        self.was_trigger_pressed = False
         self.key_held_down = False
         if self.spam_loop_job_id:
             self.root_tk_window.after_cancel(self.spam_loop_job_id)
@@ -214,7 +209,6 @@ class SpamController:
 
         # Reset toggle state
         self.is_spamming = False
-        self.was_trigger_pressed = False
         self.key_held_down = False
         self.active_settings = {} # Clear locked-in settings on stop
         
