@@ -5,7 +5,7 @@ from .key_mapper import KeyMapper
 from .process_monitor import ProcessMonitor
 from .input_simulator import InputSimulator
 
-CHECK_INTERVAL_MS = 100
+CHECK_INTERVAL_MS = 16
 DEFAULT_DELAY_MS = 100
 
 class SpamController:
@@ -23,8 +23,8 @@ class SpamController:
         self.listener_job_id = None
         self.active_settings = {} # Store the "locked-in" settings
         self.is_spamming = False  # Toggle state for spamming
-        self.was_trigger_pressed = False  # Track previous trigger key state for edge detection
-        self.trigger_toggle_processed = False  # Track if we've already processed a toggle for current key press
+        self.was_trigger_pressed = False  # Track previous trigger key state
+        self.key_held_down = False  # Track if key is currently held down to prevent rapid toggling
         self.spam_loop_job_id = None  # Job ID for the continuous spam loop
         
         self.dependencies_available = (
@@ -101,13 +101,18 @@ class SpamController:
         # Start the spam loop
         self._spam_loop(list(spam_key_chars_list), base_delay_ms)
 
+    def _emergency_stop_spamming(self):
+        """Emergency stop spamming - same logic as focus loss."""
+        self._stop_spamming()
+        self.on_trigger_not_met_callback()
+
     def _stop_spamming(self):
         """Stop the continuous spam loop."""
         if not self.is_spamming:
             return  # Not spamming
-        
+
         self.is_spamming = False
-        
+
         # Cancel the spam loop if it's scheduled
         if self.spam_loop_job_id:
             self.root_tk_window.after_cancel(self.spam_loop_job_id)
@@ -140,32 +145,26 @@ class SpamController:
         
         is_focused = self.process_monitor.is_target_process_focused(target_process_name)
 
-        # Detect trigger key press transition (edge detection)
-        trigger_just_pressed = is_key_pressed and not self.was_trigger_pressed
-        trigger_just_released = not is_key_pressed and self.was_trigger_pressed
-        
-        # Reset toggle flag when key is released, allowing next press to toggle
-        if trigger_just_released:
-            self.trigger_toggle_processed = False
-        
-        if is_focused and trigger_just_pressed and not self.trigger_toggle_processed:
-            # Toggle spamming state
-            self.trigger_toggle_processed = True  # Mark that we've processed this toggle
+        # Toggle logic: use the same emergency stop method as focus loss
+        if is_focused and is_key_pressed and not self.key_held_down:
+            # Key was just pressed - toggle spamming state
+            self.key_held_down = True
             if self.is_spamming:
-                # Stop spamming
-                self._stop_spamming()
-                self.on_trigger_not_met_callback()
+                # Use the same emergency stop as focus loss
+                self._emergency_stop_spamming()
             else:
                 # Start spamming
                 self._start_spamming()
                 self.on_trigger_met_callback()
+        elif not is_key_pressed and self.key_held_down:
+            # Key was just released - reset for next toggle
+            self.key_held_down = False
         elif is_focused and self.is_spamming:
             # Keep showing trigger met callback while spamming
             self.on_trigger_met_callback()
         elif not is_focused and self.is_spamming:
-            # Stop spamming if process loses focus
-            self._stop_spamming()
-            self.on_trigger_not_met_callback()
+            # Stop spamming if process loses focus (emergency stop)
+            self._emergency_stop_spamming()
         elif not self.is_spamming:
             self.on_trigger_not_met_callback()
 
@@ -189,7 +188,7 @@ class SpamController:
         # Reset toggle state
         self.is_spamming = False
         self.was_trigger_pressed = False
-        self.trigger_toggle_processed = False
+        self.key_held_down = False
         if self.spam_loop_job_id:
             self.root_tk_window.after_cancel(self.spam_loop_job_id)
             self.spam_loop_job_id = None
@@ -204,21 +203,20 @@ class SpamController:
         if not self.is_active:
             return
 
-        # Stop spamming if active
+        # Stop spamming if active (use emergency stop for consistency)
         if self.is_spamming:
-            self._stop_spamming()
+            self._emergency_stop_spamming()
 
         self.is_active = False
         if self.listener_job_id:
             self.root_tk_window.after_cancel(self.listener_job_id)
             self.listener_job_id = None
-        
+
         # Reset toggle state
         self.is_spamming = False
         self.was_trigger_pressed = False
-        self.trigger_toggle_processed = False
+        self.key_held_down = False
         self.active_settings = {} # Clear locked-in settings on stop
-        self.on_trigger_not_met_callback()
         
     def is_operable(self):
         return self.dependencies_available 
