@@ -16,6 +16,7 @@ distribution = false
 
 [tool.pdm.scripts]
 start = "python src/main.py"
+build = "pyinstaller CigiHoldSpam.spec --clean"
 
 [dependency-groups]
 dev = [

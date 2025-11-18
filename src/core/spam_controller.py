@@ -22,6 +22,9 @@ class SpamController:
         self.is_active = False
         self.listener_job_id = None
         self.active_settings = {} # Store the "locked-in" settings
+        self.is_spamming = False  # Toggle state for spamming
+        self.was_trigger_pressed = False  # Track previous trigger key state for edge detection
+        self.spam_loop_job_id = None  # Job ID for the continuous spam loop
         
         self.dependencies_available = (
             self.key_mapper.is_operable() and 
@@ -39,10 +42,12 @@ class SpamController:
         self.input_simulator.send_key_press_release(spam_vk_code)
 
     def _execute_spam_sequence(self, spam_key_chars, base_delay_ms):
-        if not self.is_active or not self.dependencies_available:
+        if not self.is_active or not self.dependencies_available or not self.is_spamming:
             return
 
         for i, key_char in enumerate(spam_key_chars):
+            if not self.is_spamming:  # Check again in case toggled off during sequence
+                return
             spam_vk_code = self.key_mapper.get_vk_code(key_char)
             if spam_vk_code is None:
                 print(f"SpamController: Unknown spam key '{key_char}'")
@@ -55,11 +60,66 @@ class SpamController:
             
             self._send_individual_key_action(spam_vk_code)
 
+    def _spam_loop(self, spam_key_chars, base_delay_ms):
+        """Continuous loop that executes spam sequence with delay between iterations."""
+        if not self.is_active or not self.is_spamming or not self.dependencies_available:
+            self.spam_loop_job_id = None
+            return
+        
+        # Execute the spam sequence
+        self._execute_spam_sequence(spam_key_chars, base_delay_ms)
+        
+        # Schedule next iteration if still spamming
+        if self.is_spamming:
+            self.spam_loop_job_id = self.root_tk_window.after(
+                base_delay_ms,
+                lambda skcl=list(spam_key_chars), bdms=base_delay_ms: self._spam_loop(skcl, bdms)
+            )
+        else:
+            self.spam_loop_job_id = None
+
+    def _start_spamming(self):
+        """Start the continuous spam loop."""
+        if self.is_spamming:
+            return  # Already spamming
+        
+        self.is_spamming = True
+        
+        # Get spam settings
+        spam_key_chars_list = self.active_settings.get("SpamKey", [])
+        if not spam_key_chars_list:
+            self.is_spamming = False
+            return
+        
+        try:
+            base_delay_ms_str = self.active_settings.get("DelayMS")
+            base_delay_ms = int(base_delay_ms_str)
+        except (ValueError, TypeError):
+            base_delay_ms = DEFAULT_DELAY_MS
+        
+        # Start the spam loop
+        self._spam_loop(list(spam_key_chars_list), base_delay_ms)
+
+    def _stop_spamming(self):
+        """Stop the continuous spam loop."""
+        if not self.is_spamming:
+            return  # Not spamming
+        
+        self.is_spamming = False
+        
+        # Cancel the spam loop if it's scheduled
+        if self.spam_loop_job_id:
+            self.root_tk_window.after_cancel(self.spam_loop_job_id)
+            self.spam_loop_job_id = None
+
     def _check_conditions_loop(self):
         if not self.is_active:
             if self.listener_job_id:
                 self.root_tk_window.after_cancel(self.listener_job_id)
                 self.listener_job_id = None
+            # Stop spamming if active
+            if self.is_spamming:
+                self._stop_spamming()
             self.on_trigger_not_met_callback()
             return
         
@@ -79,25 +139,31 @@ class SpamController:
         
         is_focused = self.process_monitor.is_target_process_focused(target_process_name)
 
-        if is_focused and is_key_pressed:
+        # Detect trigger key press transition (edge detection)
+        trigger_just_pressed = is_key_pressed and not self.was_trigger_pressed
+        
+        if is_focused and trigger_just_pressed:
+            # Toggle spamming state
+            if self.is_spamming:
+                # Stop spamming
+                self._stop_spamming()
+                self.on_trigger_not_met_callback()
+            else:
+                # Start spamming
+                self._start_spamming()
+                self.on_trigger_met_callback()
+        elif is_focused and self.is_spamming:
+            # Keep showing trigger met callback while spamming
             self.on_trigger_met_callback()
-            
-            # Use the locked-in settings
-            spam_key_chars_list = self.active_settings.get("SpamKey", [])
-            
-            if spam_key_chars_list:
-                try:
-                    # Use the locked-in settings
-                    base_delay_ms_str = self.active_settings.get("DelayMS")
-                    base_delay_ms = int(base_delay_ms_str)
-                except (ValueError, TypeError):
-                    base_delay_ms = DEFAULT_DELAY_MS
-                
-                self.root_tk_window.after(base_delay_ms, 
-                                          lambda skcl=list(spam_key_chars_list), bdms=base_delay_ms: \
-                                          self._execute_spam_sequence(skcl, bdms))
-        else:
+        elif not is_focused and self.is_spamming:
+            # Stop spamming if process loses focus
+            self._stop_spamming()
             self.on_trigger_not_met_callback()
+        elif not self.is_spamming:
+            self.on_trigger_not_met_callback()
+
+        # Update previous state for next iteration
+        self.was_trigger_pressed = is_key_pressed
 
         if self.is_active:
             self.listener_job_id = self.root_tk_window.after(CHECK_INTERVAL_MS, self._check_conditions_loop)
@@ -113,6 +179,13 @@ class SpamController:
         self.active_settings = settings_snapshot # Lock in the settings for this session
         print(f"SpamController started with settings: {self.active_settings}")
 
+        # Reset toggle state
+        self.is_spamming = False
+        self.was_trigger_pressed = False
+        if self.spam_loop_job_id:
+            self.root_tk_window.after_cancel(self.spam_loop_job_id)
+            self.spam_loop_job_id = None
+
         self.is_active = True
         if self.listener_job_id:
             self.root_tk_window.after_cancel(self.listener_job_id)
@@ -123,11 +196,18 @@ class SpamController:
         if not self.is_active:
             return
 
+        # Stop spamming if active
+        if self.is_spamming:
+            self._stop_spamming()
+
         self.is_active = False
         if self.listener_job_id:
             self.root_tk_window.after_cancel(self.listener_job_id)
             self.listener_job_id = None
         
+        # Reset toggle state
+        self.is_spamming = False
+        self.was_trigger_pressed = False
         self.active_settings = {} # Clear locked-in settings on stop
         self.on_trigger_not_met_callback()
         
